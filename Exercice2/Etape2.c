@@ -25,17 +25,21 @@ int main(){
     sigaddset(&mask, SIGINT);
     pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
-    int ret, *retThread1, *retThread2, *retThread3, *retThread4;
+    int ret, *retThread1, *retThread2, *retThread3, *retThread4, *retThread5;
 
-    ret = pthread_create(&threadHandle1, NULL, (void *(*) (void *))fctThreadEtape2, NULL);
+    ret = pthread_create(&threadHandle1, NULL, (void *(*) (void *))fctMasterThreadEtape2, NULL);
     ret = pthread_create(&threadHandle2, NULL, (void *(*) (void *))fctThreadEtape2, NULL);
     ret = pthread_create(&threadHandle3, NULL, (void *(*) (void *))fctThreadEtape2, NULL);
     ret = pthread_create(&threadHandle4, NULL, (void *(*) (void *))fctThreadEtape2, NULL);
-    ret = pthread_create(&threadHandle5, NULL, (void *(*) (void *))fctMasterThreadEtape2, NULL);
+    ret = pthread_create(&threadHandle5, NULL, (void *(*) (void *))fctThreadEtape2, NULL);
 
-    pause();
+    pthread_join(threadHandle1, (void **)&retThread1);
+    pthread_join(threadHandle2, (void **)&retThread2);
+    pthread_join(threadHandle3, (void **)&retThread3);
+    pthread_join(threadHandle4, (void **)&retThread4);
+    pthread_join(threadHandle5, (void **)&retThread5);
 
-    pthread_exit(0);
+    exit(0);
 }
 
 void *fctThreadEtape2(void * param){
@@ -77,10 +81,10 @@ void *fctMasterThreadEtape2(void *param){
 
 void handler(int sig){
     printf("\n");
-    pthread_kill(threadHandle1, SIGUSR1);
     pthread_kill(threadHandle2, SIGUSR1);
     pthread_kill(threadHandle3, SIGUSR1);
     pthread_kill(threadHandle4, SIGUSR1);
+    pthread_kill(threadHandle5, SIGUSR1);
 }
 
 void thread_handler(int sig){}
