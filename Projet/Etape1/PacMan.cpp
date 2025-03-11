@@ -174,7 +174,7 @@ void *fctThreadPacMan(void *param) {
   DessinePacMan(l,c,GAUCHE);
 
   while(1){
-  Attente(300);
+    Attente(300);
     switch(dir){
       case GAUCHE:
         if(tab[l][c-1].presence != MUR){
@@ -182,28 +182,40 @@ void *fctThreadPacMan(void *param) {
           c--;
           affichagePacMan(l,c,dir);
         }
+        break;
       case DROITE:
         if(tab[l][c+1].presence != MUR){
           supprimePacMan(l,c);
           c++;
           affichagePacMan(l,c,dir);
         }
+        break;
       case HAUT:
+        printf("%d\n",dir);
         if(tab[l-1][c].presence != MUR){
           supprimePacMan(l,c);
           l--;
           affichagePacMan(l,c,dir);
         }
+        break;
       case BAS:
         if(tab[l+1][c].presence != MUR){
           supprimePacMan(l,c);
           l++;
           affichagePacMan(l,c,dir);
         }
+        break;
     }
 
   }
   return NULL;
+}
+
+void supprimePacMan(int l, int c){
+  pthread_mutex_lock(&mutexTab);
+  setTab(l,c);
+  pthread_mutex_unlock(&mutexTab);
+  EffaceCarre(l,c);
 }
 
 void affichagePacMan(int l, int c, int dir){
@@ -211,12 +223,4 @@ void affichagePacMan(int l, int c, int dir){
   setTab(l,c,PACMAN,pthread_self());
   pthread_mutex_unlock(&mutexTab);
   DessinePacMan(l,c,dir);
-}
-
-void supprimePacMan(int l, int c){
-
-  pthread_mutex_lock(&mutexTab);
-  setTab(l,c);
-  pthread_mutex_unlock(&mutexTab);
-  EffaceCarre(l,c);
 }
