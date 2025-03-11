@@ -22,6 +22,8 @@ pthread_cond_t condNombreThread;
 
 pthread_key_t cle;
 
+void destructeur(void *p);
+
 void threadHandler(int sig);
 
 int main(){
@@ -30,7 +32,7 @@ int main(){
     DONNEES Param;
     pthread_t threadHandles[10];
     pthread_cond_init(&condNombreThread, NULL);
-    pthread_key_create(&cle, NULL);
+    pthread_key_create(&cle, destructeur);
 
     struct sigaction action;
     sigset_t mask;
@@ -49,7 +51,6 @@ int main(){
     pthread_mutex_lock(&mutexNombreThread);
     while(threadCompteur){
         pthread_cond_wait(&condNombreThread, &mutexNombreThread);
-        printf("%d\n", threadCompteur);
     }
     pthread_mutex_unlock(&mutexNombreThread);
 
@@ -99,11 +100,14 @@ void *fctThreadEtape4(void *param) {
     pthread_mutex_unlock(&mutexNombreThread);
     pthread_cond_signal(&condNombreThread);
 
-    free(dataThread);
     return NULL;
 }
 
 void threadHandler(int sig){
     DONNEES *dataThread = (DONNEES *)pthread_getspecific(cle);
     printf("Thread %d.%d s'occupe de %s\n", getpid(), pthread_self(), dataThread->nom);
+}
+
+void destructeur(void *p){
+    free(p);
 }
