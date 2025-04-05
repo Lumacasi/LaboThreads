@@ -27,6 +27,10 @@
 #define CENTREE 8
 
 int dir = GAUCHE;
+int nbPacGom = 0;
+int niveau = 1;
+int delaiAttente = 300;
+int score = 0;
 
 typedef struct
 {
@@ -44,6 +48,9 @@ typedef struct {
 S_CASE tab[NB_LIGNE][NB_COLONNE];
 
 pthread_mutex_t mutexTab = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutexDir = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutexNbPacGom = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condNbPacGom;
 
 void DessineGrilleBase();
 void Attente(int milli);
@@ -55,8 +62,12 @@ void supprimePacMan(int l, int c);
 
 void *fctThreadEvent(void *param);
 
+void *fctThreadPacGom(void *param);
+void dessinThreadPacGom();
+
 pthread_t pacman;
 pthread_t pthreadEvent;
+pthread_t pthreadPacGom;
 
 void threadHandler(int sig);
 
@@ -80,21 +91,15 @@ int main(int argc,char* argv[])
   }
 
   DessineGrilleBase();
-
+  ret = pthread_create(&pthreadPacGom, NULL, fctThreadPacGom, NULL);
   ret = pthread_create(&pacman, NULL, fctThreadPacMan, NULL);
   ret = pthread_create(&pthreadEvent, NULL, fctThreadEvent, NULL);
 
-  // Exemple d'utilisation de GrilleSDL et Ressources --> code a supprimer
-  /* DessinePacMan(17,7,GAUCHE);  // Attention !!! tab n'est pas modifie --> a vous de le faire !!!
+  /* 
   DessineChiffre(14,25,9);
   DessineFantome(5,9,ROUGE,DROITE);
-  DessinePacGom(7,4);
-  DessineSuperPacGom(9,5);
   DessineFantomeComestible(13,15);
   DessineBonus(5,15); */
-  
-  
-
   
   // -------------------------------------------------------------------------
   
@@ -165,6 +170,87 @@ void DessineGrilleBase() {
 
 //*********************************************************************************************
 
+void *fctThreadPacGom(void *param) {
+  int i, j;
+  while (1) {
+    pthread_mutex_lock(&mutexTab);
+    for (i = 0; i < NB_LIGNE; i++) {
+      for (j = 0; j < NB_COLONNE; j++) {
+        if (tab[i][j].presence == VIDE) {
+          setTab(i, j, PACGOM);
+          DessinePacGom(i, j);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom++;
+          pthread_mutex_unlock(&mutexNbPacGom);
+        }
+        if (i == 15 && j == 8) {
+          setTab(15, 8, VIDE);
+          EffaceCarre(15, 8);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+        }
+        if (i == 8 && j == 8) {
+          setTab(8, 8, VIDE);
+          EffaceCarre(8, 8);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+        }
+        if (i == 9 && j == 8) {
+          setTab(9, 8, VIDE);
+          EffaceCarre(9, 8);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+        }
+        if (i == 2 && j == 1) {
+          setTab(2, 1, SUPERPACGOM);
+          DessineSuperPacGom(2, 1);
+        }
+        if (i == 2 && j == 15) {
+          setTab(2, 15, SUPERPACGOM);
+          DessineSuperPacGom(2, 15);
+        }
+        if (i == 15 && j == 1) {
+          setTab(15, 1, SUPERPACGOM);
+          DessineSuperPacGom(15, 1);
+        }
+        if (i == 15 && j == 15) {
+          setTab(15, 15, SUPERPACGOM);
+          DessineSuperPacGom(15, 15);
+        }
+      }
+    }
+    pthread_mutex_unlock(&mutexTab);
+    pthread_mutex_lock(&mutexNbPacGom);
+    dessinThreadPacGom();
+    pthread_mutex_unlock(&mutexNbPacGom);
+
+    pthread_mutex_lock(&mutexNbPacGom);
+    while (nbPacGom > 0) {
+      dessinThreadPacGom();
+      pthread_cond_wait(&condNbPacGom, &mutexNbPacGom);
+    }
+    niveau++;
+    delaiAttente /= 2;
+    dessinThreadPacGom();
+    pthread_mutex_unlock(&mutexNbPacGom);
+  }
+
+  return NULL;
+}
+
+void dessinThreadPacGom(){
+  DessineChiffre(14, 22, niveau);
+  int temp = nbPacGom; 
+  DessineChiffre(12, 24, temp%10);
+  temp /= 10;
+  DessineChiffre(12, 23, temp%10);
+  temp /= 10;
+  DessineChiffre(12, 22, temp);
+}
+
 void *fctThreadPacMan(void *param) {
   sigset_t mask;
   sigemptyset(&mask);
@@ -189,51 +275,155 @@ void *fctThreadPacMan(void *param) {
 
   while (1) {
     sigprocmask(SIG_BLOCK, &mask, NULL);
-    Attente(300); 
+    Attente(delaiAttente); 
     sigprocmask(SIG_UNBLOCK, &mask, NULL);
     sigprocmask(SIG_BLOCK, &mask, NULL);
+    pthread_mutex_lock(&mutexDir);
     switch (dir) {
       case GAUCHE:
-        if (tab[l][c - 1].presence != MUR) {
-          supprimePacMan(l, c);
-          c--;
-          affichagePacMan(l, c, dir);
-        }
-        else if(c - 1 == -1) {
+        if(c - 1 == -1) {
+          if(tab[l][16].presence == PACGOM){
+            pthread_mutex_lock(&mutexNbPacGom);
+            nbPacGom--;
+            pthread_mutex_unlock(&mutexNbPacGom);
+            pthread_cond_signal(&condNbPacGom);
+            score++;
+          }
           supprimePacMan(l, c);
           c = 16;
           affichagePacMan(l, c, dir);
         }
-        break;
-      case DROITE:
-        if (tab[l][c + 1].presence != MUR) {
+        else if(tab[l][c - 1].presence == MUR) {
+        }
+        else if (tab[l][c - 1].presence == VIDE) {
           supprimePacMan(l, c);
-          c++;
+          c--;
           affichagePacMan(l, c, dir);
         }
-        else if(c + 1 == 17) {
+        else if(tab[l][c - 1].presence == PACGOM){
+          supprimePacMan(l, c);
+          c--;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score++;
+        }
+        else if(tab[l][c - 1].presence == SUPERPACGOM){
+          supprimePacMan(l, c);
+          c--;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score += 5;
+        }
+        break;
+      case DROITE:
+        if(c + 1 == 17) {
+          if(tab[l][0].presence == PACGOM){
+            pthread_mutex_lock(&mutexNbPacGom);
+            nbPacGom--;
+            pthread_mutex_unlock(&mutexNbPacGom);
+            pthread_cond_signal(&condNbPacGom);
+            score++;
+          }
           supprimePacMan(l, c);
           c = 0;
           affichagePacMan(l, c, dir);
         }
+        else if (tab[l][c + 1].presence == MUR) {
+        }
+        else if (tab[l][c + 1].presence == VIDE) {
+          supprimePacMan(l, c);
+          c++;
+          affichagePacMan(l, c, dir);
+        }
+        else if(tab[l][c + 1].presence == PACGOM){
+          supprimePacMan(l, c);
+          c++;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score++;
+        }
+        else if(tab[l][c + 1].presence == SUPERPACGOM){
+          supprimePacMan(l, c);
+          c++;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score += 5;
+        }
         break;
       case HAUT:
-        if (tab[l - 1][c].presence != MUR) {
+        if (tab[l - 1][c].presence == MUR) {
+        }
+        else if (tab[l - 1][c].presence == VIDE) {
           supprimePacMan(l, c);
           l--;
           affichagePacMan(l, c, dir);
         }
+        else if(tab[l - 1][c].presence == PACGOM){
+          supprimePacMan(l, c);
+          l--;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score++;
+        }
+        else if(tab[l - 1][c].presence == SUPERPACGOM){
+          supprimePacMan(l, c);
+          l--;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score += 5;
+        }
         break;
       case BAS:
-        if (tab[l + 1][c].presence != MUR) {
+        if (tab[l + 1][c].presence == MUR) {
+        }
+        else if (tab[l + 1][c].presence == VIDE) {
           supprimePacMan(l, c);
           l++;
           affichagePacMan(l, c, dir);
         }
+        else if(tab[l + 1][c].presence == PACGOM){
+          supprimePacMan(l, c);
+          l++;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score++;
+        }
+        else if(tab[l + 1][c].presence == SUPERPACGOM){
+          supprimePacMan(l, c);
+          l++;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexNbPacGom);
+          nbPacGom--;
+          pthread_mutex_unlock(&mutexNbPacGom);
+          pthread_cond_signal(&condNbPacGom);
+          score += 5;
+        }
         break;
     }
+    pthread_mutex_unlock(&mutexDir);
+    sigprocmask(SIG_UNBLOCK, &mask, NULL);
   }
-  sigprocmask(SIG_UNBLOCK, &mask, NULL);
   return NULL;
 }
 
