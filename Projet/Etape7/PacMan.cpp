@@ -39,6 +39,8 @@ int nbOrange = 0;
 
 int MAJScore = 0;
 
+int vies = 3;
+
 typedef struct
 {
     int L;
@@ -69,6 +71,8 @@ void DessineGrilleBase();
 void Attente(int milli);
 void setTab(int l, int c, int presence = VIDE, pthread_t tid = 0);
 
+void *fctThreadVies(void *param);
+
 void *fctThreadPacMan(void *param);
 void affichagePacMan(int l, int c, int dir);
 void supprimePacMan(int l, int c);
@@ -87,6 +91,7 @@ void *fctThreadCompteurFantomes(void *param);
 void *fctThreadFantome(void *param);
 void destructeur(void *p);
 
+pthread_t pthreadVies;
 pthread_t pacman;
 pthread_t pthreadEvent;
 pthread_t pthreadPacGom;
@@ -125,27 +130,15 @@ int main(int argc,char* argv[])
     DessineGrilleBase();
 
     ret = pthread_create(&pthreadPacGom, NULL, fctThreadPacGom, NULL);
-    ret = pthread_create(&pacman, NULL, fctThreadPacMan, NULL);
+    ret = pthread_create(&pthreadVies, NULL, fctThreadVies, NULL);
     ret = pthread_create(&pthreadEvent, NULL, fctThreadEvent, NULL);
     ret = pthread_create(&pthreadScore, NULL, fctThreadScore, NULL);
     ret = pthread_create(&pthreadBonus, NULL, fctThreadBonus, NULL);
     ret = pthread_create(&pthreadCompteurFantome, NULL, fctThreadCompteurFantomes, NULL);
 
-    /* 
-    DessineChiffre(14,25,9);
-    DessineFantome(5,9,ROUGE,DROITE);
-    DessineFantomeComestible(13,15);
-    DessineBonus(5,15); */
-
     // -------------------------------------------------------------------------
-    
-    Attente(10000);
-    pthread_kill(pthreadFantomeRouge, SIGUSR1);
-    pthread_kill(pthreadFantomeVert, SIGUSR1);
-    pthread_kill(pthreadFantomeMauve, SIGUSR1);
-    pthread_kill(pthreadFantomeOrange, SIGUSR1);
 
-    ret = pthread_join(pacman, NULL);
+    ret = pthread_join(pthreadEvent, NULL);
 
     printf("Attente de 1500 millisecondes...\n");
     Attente(1500);
@@ -296,6 +289,29 @@ void dessinThreadPacGom(){
     DessineChiffre(12, 22, temp);
 }
 
+void *fctThreadVies(void *param){
+    DessineChiffre(18,22, vies);
+    while(1){
+        pthread_create(&pacman, NULL, fctThreadPacMan, NULL);
+
+        pthread_join(pacman, NULL);
+
+        DessineChiffre(18,22, --vies);
+
+        pthread_mutex_lock(&mutexDir);
+        dir = GAUCHE;
+        pthread_mutex_unlock(&mutexDir);
+
+        if(vies == 0){
+            DessineGameOver(9, 4);
+            pthread_mutex_lock(&mutexDelai);
+            delaiAttente = 99999999;
+            pthread_mutex_unlock(&mutexDelai);
+            return NULL;
+        }
+    }
+}
+
 void *fctThreadPacMan(void *param) {
     sigset_t mask;
     sigemptyset(&mask);
@@ -401,6 +417,10 @@ void *fctThreadPacMan(void *param) {
                     pthread_cond_signal(&condScore);
                 }
                 else if(tab[l][c - 1].presence == FANTOME){
+                    supprimePacMan(l, c);
+                    setTab(l, c, VIDE);
+                    pthread_mutex_unlock(&mutexTab);
+                    pthread_mutex_unlock(&mutexDir);
                     pthread_cancel(pacman);
                 }
                 break;
@@ -475,6 +495,10 @@ void *fctThreadPacMan(void *param) {
                     pthread_cond_signal(&condScore);
                 }
                 else if(tab[l][c + 1].presence == FANTOME){
+                    supprimePacMan(l, c);
+                    setTab(l, c, VIDE);
+                    pthread_mutex_unlock(&mutexTab);
+                    pthread_mutex_unlock(&mutexDir);
                     pthread_cancel(pacman);
                 }
                 break;
@@ -526,6 +550,10 @@ void *fctThreadPacMan(void *param) {
                     pthread_cond_signal(&condScore);
                 }
                 else if(tab[l - 1][c].presence == FANTOME){
+                    supprimePacMan(l, c);
+                    setTab(l, c, VIDE);
+                    pthread_mutex_unlock(&mutexTab);
+                    pthread_mutex_unlock(&mutexDir);
                     pthread_cancel(pacman);
                 }
                 break;
@@ -577,6 +605,10 @@ void *fctThreadPacMan(void *param) {
                     pthread_cond_signal(&condScore);
                 }
                 else if(tab[l + 1][c].presence == FANTOME){
+                    supprimePacMan(l, c);
+                    setTab(l, c, VIDE);
+                    pthread_mutex_unlock(&mutexTab);
+                    pthread_mutex_unlock(&mutexDir);
                     pthread_cancel(pacman);
                 }
                 break;
@@ -805,7 +837,11 @@ void *fctThreadFantome(void *param) {
         pthread_mutex_lock(&mutexTab);
 
         if(tab[prochaineL][prochaineC].presence == PACMAN){
+            supprimePacMan(prochaineL, prochaineC);
+            setTab(prochaineL, prochaineC, VIDE);
+            pthread_mutex_unlock(&mutexTab);
             pthread_cancel(pacman);
+
         }
 
         if(tab[prochaineL][prochaineC].presence == VIDE || 
