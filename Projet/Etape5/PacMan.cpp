@@ -72,10 +72,13 @@ void dessinThreadPacGom();
 void *fctThreadScore(void *param);
 void affichageScore(int score);
 
+void *fctThreadBonus(void *param);
+
 pthread_t pacman;
 pthread_t pthreadEvent;
 pthread_t pthreadPacGom;
 pthread_t pthreadScore;
+pthread_t pthreadBonus;
 
 void threadHandler(int sig);
 
@@ -104,6 +107,7 @@ int main(int argc,char* argv[])
   ret = pthread_create(&pacman, NULL, fctThreadPacMan, NULL);
   ret = pthread_create(&pthreadEvent, NULL, fctThreadEvent, NULL);
   ret = pthread_create(&pthreadScore, NULL, fctThreadScore, NULL);
+  ret = pthread_create(&pthreadBonus, NULL, fctThreadBonus, NULL);
 
   /* 
   DessineChiffre(14,25,9);
@@ -303,6 +307,13 @@ void *fctThreadPacMan(void *param) {
             pthread_mutex_unlock(&mutexScore);
             pthread_cond_signal(&condScore);
           }
+          else if(tab[l][16].presence == BONUS){
+            pthread_mutex_lock(&mutexScore);
+            score += 20;
+            MAJScore = 1;
+            pthread_mutex_unlock(&mutexScore);
+            pthread_cond_signal(&condScore);
+          }
           supprimePacMan(l, c);
           c = 16;
           affichagePacMan(l, c, dir);
@@ -342,6 +353,16 @@ void *fctThreadPacMan(void *param) {
           pthread_mutex_unlock(&mutexScore);
           pthread_cond_signal(&condScore);
         }
+        else if(tab[l][c - 1].presence == BONUS){
+          supprimePacMan(l, c);
+          c--;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexScore);
+          score += 20;
+          MAJScore = 1;
+          pthread_mutex_unlock(&mutexScore);
+          pthread_cond_signal(&condScore);
+        }
         break;
       case DROITE:
         if(c + 1 == 17) {
@@ -352,6 +373,13 @@ void *fctThreadPacMan(void *param) {
             pthread_cond_signal(&condNbPacGom);
             pthread_mutex_lock(&mutexScore);
             score++;
+            MAJScore = 1;
+            pthread_mutex_unlock(&mutexScore);
+            pthread_cond_signal(&condScore);
+          }
+          else if(tab[l][0].presence == BONUS){
+            pthread_mutex_lock(&mutexScore);
+            score += 20;
             MAJScore = 1;
             pthread_mutex_unlock(&mutexScore);
             pthread_cond_signal(&condScore);
@@ -395,6 +423,16 @@ void *fctThreadPacMan(void *param) {
           pthread_mutex_unlock(&mutexScore);
           pthread_cond_signal(&condScore);
         }
+        else if(tab[l][c + 1].presence == BONUS){
+          supprimePacMan(l, c);
+          c++;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexScore);
+          score += 20;
+          MAJScore = 1;
+          pthread_mutex_unlock(&mutexScore);
+          pthread_cond_signal(&condScore);
+        }
         break;
       case HAUT:
         if (tab[l - 1][c].presence == MUR) {
@@ -432,6 +470,16 @@ void *fctThreadPacMan(void *param) {
           pthread_mutex_unlock(&mutexScore);
           pthread_cond_signal(&condScore);
         }
+        else if(tab[l - 1][c].presence == BONUS){
+          supprimePacMan(l, c);
+          l--;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexScore);
+          score += 20;
+          MAJScore = 1;
+          pthread_mutex_unlock(&mutexScore);
+          pthread_cond_signal(&condScore);
+        }
         break;
       case BAS:
         if (tab[l + 1][c].presence == MUR) {
@@ -465,6 +513,16 @@ void *fctThreadPacMan(void *param) {
           pthread_cond_signal(&condNbPacGom);
           pthread_mutex_lock(&mutexScore);
           score += 5;
+          MAJScore = 1;
+          pthread_mutex_unlock(&mutexScore);
+          pthread_cond_signal(&condScore);
+        }
+        else if(tab[l + 1][c].presence == BONUS){
+          supprimePacMan(l, c);
+          l++;
+          affichagePacMan(l, c, dir);
+          pthread_mutex_lock(&mutexScore);
+          score += 20;
           MAJScore = 1;
           pthread_mutex_unlock(&mutexScore);
           pthread_cond_signal(&condScore);
@@ -554,6 +612,32 @@ void affichageScore(int score){
   DessineChiffre(16, 23, score%10);
   score /= 10;
   DessineChiffre(16, 22, score);
+}
+
+void *fctThreadBonus(void *param){
+  int i, j, temps;
+  while(1){
+    temps = rand() % 10000 + 10000;
+    Attente(temps);
+    pthread_mutex_lock(&mutexTab);
+    do{
+    i = rand() % 14 + 1;
+    j = rand() % 17 + 1;
+    } while(tab[i][j].presence != VIDE);
+    pthread_mutex_unlock(&mutexTab);
+    pthread_mutex_lock(&mutexTab);
+    setTab(i, j, BONUS);
+    DessineBonus(i, j);
+    pthread_mutex_unlock(&mutexTab);
+    Attente(10000);
+    pthread_mutex_lock(&mutexTab);
+    if(tab[i][j].presence == BONUS){
+      setTab(i, j, VIDE);
+      EffaceCarre(i, j);
+    }
+    pthread_mutex_unlock(&mutexTab);
+  }
+
 }
 
 void threadHandler(int sig) {
